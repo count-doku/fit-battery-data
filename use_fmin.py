@@ -3,10 +3,9 @@ import matplotlib.pyplot as plt
 from scipy.optimize import fmin
 
 
-# Model for artificial relaxation pulse creation
 def model_(I, ts,  plot=False):
     """
-    Model to create an artificial ralaxation pulse for this example.
+    Model to create an artificial ralaxation curve for this example.
     
     I: Input current array
     ts: Sample time
@@ -41,10 +40,9 @@ def model_(I, ts,  plot=False):
     return V_out, t
 
 
-# Model to fit
 def model(parameter, I, ts,  plot=False):
     """
-    Model to calculate the resulting parameter fit for this example.
+    Model to calculate the voltage curve of the fitted parameters.
     
     parameter: [R0, R1, R2, tau1, tau2]
     I: Input current array
@@ -71,20 +69,18 @@ def model(parameter, I, ts,  plot=False):
     return V_out, t
 
 
-# Define fitting function
-def objective_function(parameter, V_truth, t):
+def objective_function(parameter, V_truth, model, I, ts):
     """
-    Objective function for this example.
+    Objective function for this example. Calculates the rmse of truth and fit.
     
     parameter: [R0, R1, R2, tau1, tau2]
     V_truth: Voltage curve to compare with
-    t: Time array for voltage curve
+    I: Current signal
+    ts: Sample time in s
     """
     
     # Calculate fitting function
-    V_out = np.multiply(parameter[0], I) + \
-            np.multiply(parameter[1]*(1-np.exp(-t/parameter[3])), I) + \
-            np.multiply(parameter[2]*(1-np.exp(-t/parameter[4])), I)
+    V_out, _ = model(parameter, I, ts)
     
     e = np.sqrt(np.mean(np.subtract(V_out, V_truth)**2))
 
@@ -103,7 +99,7 @@ if __name__ == '__main__':
     V_truth, t = model_(I, ts, plot=False)
     
     # Fit model to true voltage curve
-    x = fmin(objective_function, x_init, args=(V_truth, t), maxiter=None)
+    x = fmin(objective_function, x_init, args=(V_truth, model, I, ts), maxiter=None)
     
     # Calculate fittet model voltage curve
     V_fit, t = model(x, I, ts, plot=False)
