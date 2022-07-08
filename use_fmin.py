@@ -5,7 +5,7 @@ from scipy.optimize import fmin
 
 def model_(I, ts,  plot=False):
     """
-    Model to create an artificial ralaxation curve for this example.
+    Model to create an artificial voltage curve for this example.
     
     I: Input current array
     ts: Sample time
@@ -34,7 +34,7 @@ def model_(I, ts,  plot=False):
     if plot:
         fig, ax = plt.subplots()
         ax.plot(t, V_out)
-        ax.set(xlabel='t in s', ylabel='V in V', title='Relaxation voltage truth')
+        ax.set(xlabel='t in s', ylabel='V in V', title='Voltage truth')
         
         
     return V_out, t
@@ -63,7 +63,7 @@ def model(parameter, I, ts,  plot=False):
     if plot:
         fig, ax = plt.subplots()
         ax.plot(t, V_out)
-        ax.set(xlabel='t in s', ylabel='V in V', title='Relaxation voltage fit')
+        ax.set(xlabel='t in s', ylabel='V in V', title='Voltage fit')
         
         
     return V_out, t
