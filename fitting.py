@@ -135,13 +135,14 @@ def fit_on_pulse(pulse:dict, ocv_map:object, CN:float, model:object,
                  objective_function:object,
                  bounds=None, plot=False, hold_R0=False, plot_path=None):
     """
-    Fit <model> to <pulse> and returns specified model parameter.
+    Fit <model> to <pulse> and return specified model parameter.
     
     The pulse need to be a dict containing the keys: 'I', 'V' and 't' for 
     current, voltage and time of the pulse, respectively. For a proper estimation
     of the internal resistance, the pulse should contain the current and voltage 
-    step at the beginning of the pulse. As well for the initial state-of-charge
-    determination, the first voltage sample need to be without an applied current.
+    step at the beginning of the pulse. For the initial state-of-charge
+    determination, the first voltage sample should be after relaxation and of
+    zero-current.
     The function acts as following:
         1) Extract data arrays from pulse dictionary
         2) Check whether it is a discharge- or charge pulse
@@ -270,7 +271,63 @@ def fit_on_pulse(pulse:dict, ocv_map:object, CN:float, model:object,
 
 def fit_on_relaxation(pulse:dict, relax:dict, ocv_map:object, CN:float,
                       model:object, objective_function:object,
-                      bounds=None, plot=False, hold_R0=False):
+                      bounds=None, plot=False, hold_R0=False, plot_path=None):
+    """
+    Fit <model> to <relax> using preceding <pulse> and return specified model
+    parameter.
+    
+    The pulse and the relax information need to be a dict conatining the keys:
+    'I', 'V' and 't' for current, voltage and time of the steps, respectively.
+    For a proper estimation of the internal resistance, the relaxation should 
+    contain the current and voltage step at the beginning of the relaxation.
+    For the initial state-of-charge determination, the first voltage sample of
+    <pulse> should be after relaxation and of zero-current. 
+    The function acts as following:
+        1) Extract data arrays from pulse and relax dict
+        2) Check whether it is a discharge- or charge relaxation
+        3) Get pulse initial SOC from <ocv_map>
+        4) Normalize relaxation time s.t. it starts with 0
+        5) Calculate SOC at the end of the preceding pulse
+        6) Calculate relaxation OCV
+        7) Subtract OCV from given relaxation voltage
+        8) Guess initial parameters (some more sophisticated method could be 
+                                     inserted here)
+        9) If <hold_R0>: Force R0 estimation for the fitting process. If R0
+            estimation is below 1 mOhm, take next sample. Repeat this 8 times.
+        10) Fit pulse with Nelder-Meads and provided bounds
+        11) Write parameter array [SOC, P0, P1, P2, P3 ... PN]
+        12) If <plot>: Plot fitting result and if <plot_path> save figure on
+                       specified path
+    
+    Parameters
+    ----------
+    pulse : dict
+        DESCRIPTION.
+    relax : dict
+        DESCRIPTION.
+    ocv_map : object
+        DESCRIPTION.
+    CN : float
+        DESCRIPTION.
+    model : object
+        DESCRIPTION.
+    objective_function : object
+        DESCRIPTION.
+    bounds : TYPE, optional
+        DESCRIPTION. The default is None.
+    plot : TYPE, optional
+        DESCRIPTION. The default is False.
+    hold_R0 : TYPE, optional
+        DESCRIPTION. The default is False.
+    plot_path : TYPE, optional
+        DESCRIPTION. The default is None.
+
+    Returns
+    -------
+    relax_parameter : TYPE
+        DESCRIPTION.
+
+    """
     # Extract data
     pulse_current = pulse['I']
     relax_current = relax['I']
@@ -286,11 +343,11 @@ def fit_on_relaxation(pulse:dict, relax:dict, ocv_map:object, CN:float,
         pulse_type = 'charge'
     print(f'\t Start fitting on {pulse_type} relaxation')   # Verbose
     
-    # Normalize relaxation time
-    relax_time = relax_time - relax_time[0]
-    
     # Obtain initial SOC from ocv_map and initial pulse voltage
     pulse_SOC_init = ocv_map(pulse_voltage[0]).item()
+    
+    # Normalize relaxation time
+    relax_time = relax_time - relax_time[0]
     
     # Calculate SOC at the end of the pulse
     pulse_duration = pulse_time[-1] - pulse_time[0]
@@ -354,5 +411,10 @@ def fit_on_relaxation(pulse:dict, relax:dict, ocv_map:object, CN:float,
         ax.legend(['fit', 'truth'])
         print(f'SOC: {relax_SOC_init}\n Parameter: {p}')
         plt.tight_layout()
+        if plot_path:
+            file_name = str(pulse_SOC_init)+'.pdf'
+            path = os.path.join(plot_path, file_name)
+            plt.savefig(path)
+            plt.close()
         
     return relax_parameter
