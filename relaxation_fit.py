@@ -141,6 +141,8 @@ if __name__ == '__main__':
     V_est_init = RC_equation_relaxation(p_init, I_relax, t_relax, t_pulse)
     V_est_perfect = RC_equation_relaxation(parameter, I_relax, t_relax, t_pulse)
     
+    #TODO: Add fitting here
+    
     fig, ax = plt.subplots(nrows=2, ncols=2)
     ax[0,0].plot(t_relax, I_relax, label='I')
     ax[0,1].plot(t_relax, V_est_init, label='V est init')
