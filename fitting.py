@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
 
-def RC_equation_applied_current(parameter, I, t, t_pulse=False, plot=False):
+def RC_equation_applied_current(parameter, I, t, t_pulse=None, plot=False):
     """
     Function to calculate voltage response to an applied current for a 
     3rd order ECM.
@@ -97,7 +97,7 @@ def RC_equation_relaxation(parameter, I, t, t_pulse, plot=False):
     return V_out
     
     
-def objective_function(parameter, V_truth, model, I, t, t_pulse=None):
+def objective_function_pulse(parameter, V_truth, model, I, t, t_pulse=None):
     """
     Calculates rmse as objective for the minimization.
     
@@ -131,6 +131,123 @@ def objective_function(parameter, V_truth, model, I, t, t_pulse=None):
     return e
 
 
+def impedance_model(parameter, f, plot=False):
+    # 2 RC elements
+    R0 = parameter[0]
+    R1 = parameter[1]
+    R2 = parameter[2]
+    tau1 = parameter[3]
+    tau2 = parameter[4]
+    
+    C1 = tau1/R1
+    C2 = tau2/R2
+    
+    omega = 2*np.pi*f
+    
+    Z = R0 + 1/(1/R1+1j*omega*C1) + 1/(1/R2+1j*omega*C2)
+    
+    if plot:
+        fig, ax = plt.subplots()
+        ax.plot(np.real(Z), -np.imag(Z))
+        ax.set(xlabel='real(Z)', ylabel='imag(Z)', title='spectra')
+        ax.axis('equal')
+        
+    return Z
+
+        
+def objective_function_impedance(parameter, Z_truth, model, f):
+    
+    # Calculate fitting function
+    Z_out = model(parameter, f)
+    
+    e = np.sum(np.subtract(np.real(Z_out), np.real(Z_truth))**2 +\
+               np.subtract(np.imag(Z_out), np.imag(Z_truth))**2)
+    print(e)
+    return e
+
+
+def fit_on_eis(spectra:dict, model:object, objective_function:object, soc:float,
+               bounds=None, plot=False, plot_path=None):
+    freq = spectra['frequency']
+    real = spectra['real']
+    imag = spectra['imag']
+    
+    Z_truth = real+1j*imag
+    
+    # Find zero crossing
+    prev_sign = np.sign(imag[0])  # initialize previous sign
+    index = None  # initialize index
+    for idx, i in enumerate(imag):
+        sign = np.sign(i)  # get sign of imag value
+        if sign != prev_sign:  # check if sign has changed
+            index = np.copy(idx)  # remember index
+            break 
+        prev_sign = np.copy(sign)  # keep track of previous sign
+        
+    # If there was no zero-crossing -> only negative imag values
+    # Take the smallest real value from the dataset
+    if index:
+        crossing_points = [real[index-1], real[index]]
+        f_crossing_points = [freq[index-1], freq[index]]
+        imag_crossing_points = [imag[index-1], imag[index]]
+        r0 = np.interp(0, imag_crossing_points, crossing_points)
+        
+        print('zero-crossing found. r0 between: r0, freq, imag')
+        print(f'{crossing_points[0]}, {f_crossing_points[0]}, {imag_crossing_points[0]}')
+        print(f'{crossing_points[1]}, {f_crossing_points[1]}, {imag_crossing_points[1]}')
+        print(f'Interpolated r0: {r0}')
+        
+    else:
+        index_min_real = np.argmin(real)
+        r0 = real[index_min_real]
+        f_min_real = freq[index_min_real]
+        imag_min_real = imag[index_min_real]
+        
+        print('no zero-crossing found. Take min(real): r0, freq, imag')
+        print(f'{r0}, {f_min_real}, {imag_min_real}')
+        
+        
+    # Guess initial parameters
+    p_init = [r0,
+              r0*10,
+              r0*20,
+              10,
+              100]
+    
+    p_res = minimize(objective_function,
+                      p_init,
+                      args=(Z_truth,
+                            model,
+                            freq),
+                      bounds=bounds,
+                      method='Nelder-Mead')  
+    p = p_res['x']
+    
+    # Allocate paramter array [SOC, p1, p2, ... pn]
+    spectra_parameter = np.zeros(len(p_init)+1)
+    
+    # Write parameters in array
+    spectra_parameter[0] = soc
+    spectra_parameter[1:] = p
+    
+    if plot:
+        model(p, freq, plot=True)
+        plt.plot(real, -imag, linestyle='--')
+        ax = plt.gca()
+        ax.set(title=f'SOC: {soc}', xlabel='Re(Z)', ylabel='Imag(Z)')
+        ax.legend(['fit', 'truth'])
+        ax.axis('equal')
+        print(f'SOC: {soc}\n Parameter: {p}')
+        plt.tight_layout()
+        if plot_path:
+            file_name = str(soc)+'.pdf'
+            path = os.path.join(plot_path, file_name)
+            plt.savefig(path)
+            plt.close()
+            
+    return p
+    
+    
 def fit_on_pulse(pulse:dict, ocv_map:object, CN:float, model:object,
                  objective_function:object,
                  bounds=None, plot=False, hold_R0=False, plot_path=None):
