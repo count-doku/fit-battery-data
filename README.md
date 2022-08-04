@@ -1,5 +1,6 @@
-#TODO
+# TODO
 - Use functions from fitting.py for fitting
+- Provide initial parameter guess as argument. Otherwise the function depends on the number of parameters
 
 # use_fmin.py
 Contains an example of using scipy.optimize.fmin fitting a 2nd degree equivalen circuit model to an artificial created voltage curve.
