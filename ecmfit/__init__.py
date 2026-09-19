@@ -1,6 +1,12 @@
 """Fit equivalent-circuit model parameters to lithium-ion battery measurements."""
 
-from ecmfit.fit import FitResult, fit_eis, fit_pulse, fit_relaxation
+from ecmfit.fit import (
+    FitResult,
+    fit_eis,
+    fit_pulse,
+    fit_relaxation,
+    identifiable_tau,
+)
 from ecmfit.models import OCV, impedance, voltage_relaxation, voltage_step_response
 from ecmfit.plotting import plot_nyquist, plot_time_domain
 from ecmfit.simulate import ECMCell
@@ -14,6 +20,7 @@ __all__ = [
     "fit_eis",
     "fit_pulse",
     "fit_relaxation",
+    "identifiable_tau",
     "impedance",
     "plot_nyquist",
     "plot_time_domain",

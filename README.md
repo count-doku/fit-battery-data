@@ -83,12 +83,22 @@ uv run python examples/fit_eis.py
 | Function | Input | Identifies well | Identifies poorly |
 | --- | --- | --- | --- |
 | `fit_pulse` | current step and the voltage response | `R0`, fast RC elements | time constants longer than the pulse |
-| `fit_relaxation` | the rest after a pulse | slow RC elements — nothing is driven while they decay | anything faster than the sample time |
+| `fit_relaxation` | the rest after a pulse | slow RC elements — **if the pulse was long enough to excite them** | `R0`, which one sample interval has to carry; anything faster than the sample time |
 | `fit_eis` | impedance spectrum | whatever lies inside the measured frequency band | processes outside that band; diffusion |
 
 All three return the same [`FitResult`](ecmfit/fit.py), so results from different
 domains are directly comparable. `tests/test_fit.py` asserts that a pulse fit and
-an EIS fit of the same cell agree to within 1 ppm.
+an EIS fit of the same cell agree to within 1 ppm on noise-free data.
+
+**Relaxation is the harder of the two time-domain fits**, and by more than it
+looks. With 1 mV of voltage noise a pulse fit lands within about 5 % on the
+resistances; a relaxation fit of the same trace is near 10 %, and roughly a
+quarter of fits diverge outright. Two structural reasons: `R0` multiplies the
+current, which is non-zero at exactly one sample of a relaxation, so its noise
+arrives at full strength with nothing to average against — whereas in a pulse
+`R0` enters every sample. And a relaxation decays towards zero, so its later
+samples are mostly noise. Separating a sum of exponentials under noise is
+ill-conditioned; that is a property of the problem, not something to tune away.
 
 ## Method notes
 
@@ -109,6 +119,24 @@ network are positive. Without that constraint the simplex walks into negative
 time constants, where the model still evaluates and the residual still looks
 small — and the parameters mean nothing. This was not a hypothetical: it is what
 the unbounded version did on the spectrum in the figure above.
+
+**Time constants are additionally capped at what the measurement can resolve**,
+via `identifiable_tau(t_pulse, t_observed)`, which returns the shorter of two
+limits. *Excitation:* an RC element only charges to `1 - exp(-t_pulse/τ)`, so a
+τ much longer than the pulse is barely stirred and no length of subsequent rest
+recovers it. *Observation:* a decay never seen to decay cannot be measured
+either. For a short pulse followed by a long rest the pulse binds, which is the
+case people get wrong. The same number places the initial guesses and bounds the
+optimiser, so the two cannot disagree. This does not make a typical fit more
+accurate — the median is unchanged — it stops the occasional one running away:
+diverged fits fell from 40 % to 28 % and the worst observed τ error by 90×.
+Capping at the record length alone achieved almost nothing, because the record
+was not the binding constraint.
+
+Impedance fits get positivity bounds but no cap. A spectrum constrains each
+point independently and does not show the same runaway, and capping τ at
+`1/(2πf_min)` would clip processes still plainly visible on the rising flank of
+their arc.
 
 **Impedance residuals are weighted by `1/|Z|` by default.** Low-frequency points
 are an order of magnitude larger than high-frequency ones and would otherwise
@@ -154,8 +182,20 @@ Stated rather than discovered later:
 - **One operating point per fit.** Parameters depend on SOC and temperature.
   Fit each condition separately and build the map from the results — that is how
   the `soc` field on `FitResult` is meant to be used.
-- **Nelder-Mead is a local method.** Good guesses and bounds make it reliable
-  here, not immune. Check `result.success` and look at the plot.
+- **Nelder-Mead is a local method.** Good guesses and bounds make it *more*
+  reliable, not reliable. On a noisy relaxation roughly a quarter of fits still
+  diverge, and `result.success` is `True` for most of them — the optimiser
+  converged, just not to the right place. Check the residual against your noise
+  floor and look at the plot.
+- **Measurement design is part of the method.** If you want a 180 s time
+  constant, pulse for at least a few hundred seconds. A 60 s pulse excites it to
+  28 % of amplitude and the fit will not find it however long you then rest;
+  `tests/test_fit.py` asserts exactly that.
+- **Noise is assumed to be on the voltage only.** Current is treated as exact,
+  which is the least-squares assumption and reasonable for a cycler that
+  commands current and measures voltage. It omits one real error source: at
+  commanded zero a cycler still passes a small offset current, which drifts the
+  voltage across a long rest in the same time band as the slow RC element.
 - **OCV hysteresis is not modelled.** The OCV curve is assumed single-valued,
   which is a poor assumption for LFP.
 

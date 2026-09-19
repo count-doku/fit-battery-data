@@ -27,29 +27,29 @@ def main():
     ocv = OCV([0.0, 1.0], [2.5, 4.2])
     fig, axes = plt.subplots(1, 3, figsize=(13, 3.9))
 
-    # A pulse with realistic measurement noise on the voltage.
-    cell = ECMCell(PARAMETER, ocv, CAPACITY, soc_init=0.5, ts=1.0)
-    current = np.array([0.0] + [-1.0] * 600)
-    t, voltage, _ = cell.simulate(current)
-    voltage = voltage + np.random.default_rng(0).normal(0.0, 1e-3, voltage.size)
-    pulse_fit = fit_pulse({"I": current, "V": voltage, "t": t}, ocv, CAPACITY, n_rc=2)
-    plot_time_domain(pulse_fit, ax=axes[0], title="pulse, 1 mV noise")
-    axes[0].lines[0].set(linewidth=0.7, alpha=0.65)
-
-    # The relaxation that follows the same pulse.
+    # ONE measurement: rest, a 10 minute 1C discharge, then 50 minutes of
+    # relaxation. One noise realisation on the voltage, the current left exact.
+    # The pulse and the relaxation are slices of this single trace, because
+    # that is the only arrangement a real instrument can produce — the noise
+    # does not stop when the current does.
     cell = ECMCell(PARAMETER, ocv, CAPACITY, soc_init=0.5, ts=1.0)
     current = np.array([0.0] + [-1.0] * 600 + [0.0] * 3000)
     t, voltage, _ = cell.simulate(current)
+    voltage = voltage + np.random.default_rng(0).normal(0.0, 1e-3, voltage.size)
     data = {"I": current, "V": voltage, "t": t}
-    relax_fit = fit_relaxation(
-        {k: v[:601] for k, v in data.items()},
-        {k: v[600:] for k, v in data.items()},
-        ocv,
-        CAPACITY,
-        n_rc=2,
-    )
-    plot_time_domain(relax_fit, ax=axes[1], title="relaxation after the pulse")
-    axes[1].set_xlim(0, 1200)  # the tail past this is flat and tells you nothing
+
+    split = 600  # last sample still carrying current
+    pulse = {k: v[: split + 1] for k, v in data.items()}
+    relax = {k: v[split:] for k, v in data.items()}
+
+    pulse_fit = fit_pulse(pulse, ocv, CAPACITY, n_rc=2)
+    plot_time_domain(pulse_fit, ax=axes[0], title="pulse, 1 mV noise")
+    axes[0].lines[0].set(linewidth=0.7, alpha=0.65)
+
+    relax_fit = fit_relaxation(pulse, relax, ocv, CAPACITY, n_rc=2)
+    plot_time_domain(relax_fit, ax=axes[1], title="relaxation, same trace and noise")
+    axes[1].lines[0].set(linewidth=0.7, alpha=0.65)
+    axes[1].set_xlim(0, 1200)  # past this the signal is under the noise floor
 
     # A spectrum carrying a wiring inductance the ECM has no branch for.
     f = np.logspace(-3, 3, 100)
